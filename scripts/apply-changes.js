@@ -15,7 +15,7 @@ FILE_PATHS[V9] = {
     "android.styles": "platforms/android/app/src/main/res/values/cordova-plugin-window-background-styles.xml"
 };
 
-var deferral, fs, path, parser, platformVersion;
+var deferral, fs, path, platformVersion;
 
 function log(message) {
     console.log(PLUGIN_NAME + ": " + message);
@@ -42,44 +42,24 @@ function run() {
     try {
         fs = require('fs');
         path = require('path');
-        parser = require('xml2js');
+
+        platformVersion = getCordovaAndroidVersion();
+
+        var pk = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json')));
+        var color = pk.cordova.plugins["cordova-plugin-window-background"].WINDOW_BACKGROUND_COLOR;
+
+        var manifestPath = path.resolve(process.cwd(), FILE_PATHS[platformVersion]["android.manifest"]);
+        var contents = fs.readFileSync(manifestPath).toString();
+        fs.writeFileSync(manifestPath, contents.replace(/(android:theme="@[^=]+")()/g, 'android:theme="@style/AppTheme"'), 'utf8');
+
+        var stylesPath = path.resolve(process.cwd(), FILE_PATHS[platformVersion]["android.styles"]);
+        fs.writeFileSync(stylesPath, '<resources><style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar"><item name="android:windowBackground">@color/windowBackgroundColor</item></style><color name="windowBackgroundColor">' + color + '</color></resources>');
+
     } catch (e) {
-        throw ("Failed to load dependencies. If using cordova@6 CLI, ensure this plugin is installed with the --fetch option: " + e.toString());
+        throw ("Error: " + e.toString());
     }
 
-    platformVersion = getCordovaAndroidVersion();
-
-    var data = fs.readFileSync(path.resolve(process.cwd(), 'config.xml'));
-
-    parser.parseString(data, attempt(function (err, result) {
-
-        if (err) throw err;
-
-        var color, plugins = result.widget.plugin;
-
-        for (var n = 0, len = plugins.length; n < len; n++) {
-            var plugin = plugins[n];
-            if (plugin.$.name === PLUGIN_NAME && plugin.variable && plugin.variable.length > 0) {
-                color = plugin.variable.pop().$.value;
-                break;
-            }
-        }
-
-        if (color) {
-            var manifestPath = path.resolve(process.cwd(), FILE_PATHS[platformVersion]["android.manifest"]);
-            var contents = fs.readFileSync(manifestPath).toString();
-            fs.writeFileSync(manifestPath, contents.replace(/(android:theme="@[^=]+")()/g, 'android:theme="@style/AppTheme"'), 'utf8');
-
-            var stylesPath = path.resolve(process.cwd(), FILE_PATHS[platformVersion]["android.styles"]);
-            fs.writeFileSync(stylesPath, '<resources><style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar"><item name="android:windowBackground">@color/windowBackgroundColor</item></style><color name="windowBackgroundColor">' + color + '</color></resources>');
-
-        } else {
-            log("No custom color found in config.xml - using plugin default");
-        }
-
-        deferral.resolve();
-
-    }));
+    deferral.resolve();
 }
 
 function attempt(fn) {
